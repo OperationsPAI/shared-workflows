@@ -85,6 +85,8 @@ jobs:
     secrets:
       VOLCES_USERNAME: ${{ secrets.VOLCES_USERNAME }}
       VOLCES_PASSWORD: ${{ secrets.VOLCES_PASSWORD }}
+      secret_build_args: | # Optional, for sensitive build arguments
+        PRIVATE_TOKEN=${{ secrets.PRIVATE_TOKEN }}
     vars:
       VOLCES_REGISTRY: ${{ vars.VOLCES_REGISTRY }}
 ```
@@ -101,6 +103,7 @@ jobs:
 
 - `VOLCES_USERNAME`: Username for the private registry
 - `VOLCES_PASSWORD`: Password for the private registry
+- `secret_build_args`: (Optional) Multiline string of build arguments to be passed as secrets
 
 **Required Variables:**
 

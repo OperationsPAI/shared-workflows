@@ -34,7 +34,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Extract Tag Version
-      uses: ./actions/extract-tag-version
+      uses: OperationsPAI/shared-workflows/actions/extract-tag-version@main
       id: extract_version
       with:
         semver-regex: ${{ env.SEMVER_REGEX }}

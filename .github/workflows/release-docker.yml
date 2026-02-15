@@ -3,6 +3,10 @@ name: Build & Push Docker Image
 on:
   workflow_call:
     inputs:
+      caller:
+        description: "The ID of the caller repository"
+        type: string
+        required: true
       main-branch:
         description: "The main branch to check if the tag commit is an ancestor of"
         type: string
@@ -21,7 +25,7 @@ on:
 jobs:
   build-and-push:
     name: Build and Push Docker Image
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
@@ -35,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Extract Tag Version
-        uses: ./actions/extract-tag-version
+        uses: OperationsPAI/shared-workflows/actions/extract-tag-version@main
         id: extract_version
         with:
           semver-regex: ${{ env.SEMVER_REGEX }}
@@ -51,13 +55,44 @@ jobs:
           username: ${{ secrets.VOLCES_USERNAME }}
           password: ${{ secrets.VOLCES_PASSWORD }}
 
+      - name: Organize Build Args & Secrets
+        id: organize_vars
+        env:
+          G_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "dynamic_args<<EOF"
+            echo "APP_VERSION=${{ steps.extract_version.outputs.version }}"
+            echo "GIT_COMMIT=${{ github.sha }}"
+            case "${{ inputs.caller }}" in
+              "AegisLab-frontend")
+                ;;
+              "AegisLab")
+                ;;
+            esac
+            echo "${{ inputs.build_args }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "dynamic_secrets<<EOF"
+            case "${{ inputs.caller }}" in
+              "AegisLab-frontend")
+                echo "NPM_TOKEN=$G_TOKEN"
+                ;;
+              "AegisLab")
+                ;;
+            esac
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          build-args: |
-            ${{ inputs.build_args }}
+          build-args: ${{ steps.organize_vars.outputs.dynamic_args }}
+          secrets: ${{ steps.organize_vars.outputs.dynamic_secrets }}
           tags: |
             ${{ vars.VOLCES_REGISTRY }}/${{ inputs.volces_name }}:${{ steps.extract_version.outputs.version }}
             ${{ vars.VOLCES_REGISTRY }}/${{ inputs.volces_name }}:latest
