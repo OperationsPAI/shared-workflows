@@ -17,6 +17,10 @@ on:
           repo_url:
             type: string
             required: true
+          tag_push:
+            description: "Set to true if triggered by a tag push, false for path-only changes"
+            type: boolean
+            required: true
 
 jobs:
   deploy:
@@ -34,6 +38,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Extract Tag Version
+      if: inputs.tag_push
       uses: OperationsPAI/shared-workflows/actions/extract-tag-version@main
       id: extract_version
       with:
@@ -41,6 +46,7 @@ jobs:
         main-branch: ${{ inputs.main-branch }}
 
     - name: Update Helm AppVersion
+      if: inputs.tag_push
       shell: bash
       run: |
         VERSION="${{ steps.extract_version.outputs.version }}"
