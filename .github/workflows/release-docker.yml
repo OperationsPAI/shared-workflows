@@ -12,15 +12,33 @@ on:
         type: string
         required: false
         default: "main"
-      volces_name:
-        description: "The image name without the registry prefix to push to volces registry"
+      image:
+        description: "The image name"
         type: string
         required: true
-      build_args:
+      context:
+        description: "The build context for the Docker build (default is the repository root)"
+        type: string
+        required: false
+        default: "."
+      file:
+        description: "The path to the Dockerfile relative to the context (default is 'Dockerfile')"
+        type: string
+        required: false
+        default: "Dockerfile"
+      build-args:
         description: "Multiline string of build-args"
         type: string
         required: false
         default: ""
+      tag-push:
+        description: "Set to true if triggered by a tag push, false for path-only changes"
+        type: boolean
+        required: true
+      tag-prefix:
+        description: "The prefix to strip from the tag name when extracting the version (e.g., 'v' in 'v1.0.0')."
+        type: string
+        required: false
 
 jobs:
   build-and-push:
@@ -37,13 +55,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Extract Tag Version
+        if: inputs.tag-push
         uses: OperationsPAI/shared-workflows/actions/extract-tag-version@main
         id: extract_version
         with:
           semver-regex: ${{ env.SEMVER_REGEX }}
           main-branch: ${{ inputs.main-branch }}
+          tag-prefix: ${{ inputs.tag-prefix }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -51,51 +73,59 @@ jobs:
       - name: Login to private registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.VOLCES_REGISTRY }}
-          username: ${{ secrets.VOLCES_USERNAME }}
-          password: ${{ secrets.VOLCES_PASSWORD }}
+          registry: ${{ vars.DOCKERHUB_REGISTRY }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Determine Docker Tags
+        id: docker_tags
+        run: |
+          if [ "${{ inputs.tag-push }}" == "true" ]; then
+            TAG="${{ steps.extract_version.outputs.version }}"
+            LATEST_IMAGE="${{ vars.DOCKERHUB_REGISTRY }}/${{ inputs.image }}:latest"
+          else
+            TAG="${GITHUB_SHA:0:7}"
+            LATEST_IMAGE=""
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "latest_image=$LATEST_IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Organize Build Args & Secrets
         id: organize_vars
         env:
           G_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          {
-            echo "dynamic_args<<EOF"
-            echo "APP_VERSION=${{ steps.extract_version.outputs.version }}"
-            echo "GIT_COMMIT=${{ github.sha }}"
-            case "${{ inputs.caller }}" in
-              "AegisLab-frontend")
-                ;;
-              "AegisLab")
-                ;;
-            esac
-            echo "${{ inputs.build_args }}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          rm -f args.tmp
+          
+          echo "APP_VERSION=${{ steps.docker_tags.outputs.tag }}" >> args.tmp
+          echo "GIT_COMMIT=${{ github.sha }}" >> args.tmp
+          if [ -n "${{ inputs.build-args }}" ]; then
+            echo "${{ inputs.build-args }}" | tr -d '\r' >> args.tmp
+          fi
 
-          {
-            echo "dynamic_secrets<<EOF"
-            case "${{ inputs.caller }}" in
-              "AegisLab-frontend")
-                echo "NPM_TOKEN=$G_TOKEN"
-                ;;
-              "AegisLab")
-                ;;
-            esac
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          echo "dynamic_args<<EOF" >> "$GITHUB_OUTPUT"
+          cat args.tmp >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          rm -f secrets.tmp
+          if [ "${{ inputs.caller }}" == "AegisLab-frontend" ]; then
+            echo "NPM_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> secrets.tmp
+          fi
+
+          echo "dynamic_secrets<<EOF" >> "$GITHUB_OUTPUT"
+          [ -f secrets.tmp ] && cat secrets.tmp >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
           push: true
           build-args: ${{ steps.organize_vars.outputs.dynamic_args }}
           secrets: ${{ steps.organize_vars.outputs.dynamic_secrets }}
           tags: |
-            ${{ vars.VOLCES_REGISTRY }}/${{ inputs.volces_name }}:${{ steps.extract_version.outputs.version }}
-            ${{ vars.VOLCES_REGISTRY }}/${{ inputs.volces_name }}:latest
+            ${{ vars.DOCKERHUB_REGISTRY }}/${{ inputs.image }}:${{ steps.docker_tags.outputs.tag }}
+            ${{ steps.docker_tags.outputs.latest_image }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          network: host

@@ -1,26 +1,22 @@
 name: Shared Helm Publish
 
 on:
-    workflow_call:
-        inputs:
-          main-branch:
-            description: "The main branch to check if the tag commit is an ancestor of"
-            type: string
-            required: false
-            default: "main"
-          chart_dir:
-            type: string
-            default: "helm"
-          repo_name:
-            type: string
-            required: true
-          repo_url:
-            type: string
-            required: true
-          tag_push:
-            description: "Set to true if triggered by a tag push, false for path-only changes"
-            type: boolean
-            required: true
+  workflow_call:
+    inputs:
+      main-branch:
+        description: "The main branch to check if the tag commit is an ancestor of"
+        type: string
+        required: false
+        default: "main"
+      chart-dir:
+        type: string
+        default: "helm"
+      repo-name:
+        type: string
+        required: true
+      repo-url:
+        type: string
+        required: true
 
 jobs:
   deploy:
@@ -37,25 +33,6 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
 
-    - name: Extract Tag Version
-      if: inputs.tag_push
-      uses: OperationsPAI/shared-workflows/actions/extract-tag-version@main
-      id: extract_version
-      with:
-        semver-regex: ${{ env.SEMVER_REGEX }}
-        main-branch: ${{ inputs.main-branch }}
-
-    - name: Update Helm AppVersion
-      if: inputs.tag_push
-      shell: bash
-      run: |
-        VERSION="${{ steps.extract_version.outputs.version }}"
-        CHART_PATH="${{ inputs.chart_dir }}/Chart.yaml"
-        
-        sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" $CHART_PATH
-        
-        echo "::notice::Updated appVersion to ${VERSION} in $CHART_PATH"
-
     - name: Set up Helm
       uses: azure/setup-helm@v4.3.0
       with:
@@ -63,9 +40,9 @@ jobs:
 
     - name: Run publish script
       env:
-        CHART_DIR: ${{ inputs.chart_dir }}
-        REPO_NAME: ${{ inputs.repo_name }}
-        REPO_URL: ${{ inputs.repo_url }}
+        CHART_DIR: ${{ inputs.chart-dir }}
+        REPO_NAME: ${{ inputs.repo-name }}
+        REPO_URL: ${{ inputs.repo-url }}
       run: |
         set -e
         helm dependency update $CHART_DIR
