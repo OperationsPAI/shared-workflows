@@ -5,6 +5,10 @@ inputs:
     description: "The SemVer regex pattern to validate the tag against."
     required: false
     default: "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:-([0-9A-Za-z.-]+))?(?:\\+([0-9A-Za-z.-]+))?$"
+  tag-prefix:
+    description: "Optional prefix to strip from the tag before SemVer validation (e.g. 'release-client/' for tags like 'release-client/v1.0.0')."
+    required: false
+    default: ""
   main-branch:
     description: "The main branch to check ancestor against."
     required: false
@@ -26,11 +30,15 @@ runs:
           RAW_VERSION="${{ github.event.inputs.tag_version }}"
         fi
 
-        VERSION=${RAW_VERSION#refs/tags/}
+        TAG_NAME=${RAW_VERSION#refs/tags/}
+        TAG_PREFIX="${{ inputs.tag-prefix }}"
+        VERSION=${TAG_NAME#${TAG_PREFIX}}
+
         if echo "${VERSION}" | grep -Eq "${{inputs.semver-regex}}"; then
           echo "::notice::Version format is valid: ${VERSION}"
           VERSION_WITHOUT_V=${VERSION#v}
           echo "version=${VERSION_WITHOUT_V}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
         else
           echo "::error title=Version Validation Failed::Version format: ${VERSION}"
           echo "Expected strict SemVer format (e.g., v1.0.0, v1.0.0-alpha.1)."
