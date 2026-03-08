@@ -49,10 +49,9 @@ runs:
       id: resolve_sha
       shell: bash
       run: |
-        VERSION="${{ steps.extract_version.outputs.version }}"
-        TAG_NAME="v${VERSION}"
+        TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
 
-        COMMIT_SHA=$(git rev-parse "${TAG_NAME}" 2>/dev/null || echo "")
+        COMMIT_SHA=$(git rev-parse "refs/tags/${TAG_NAME}" 2>/dev/null || echo "")
 
         if [ -z "${COMMIT_SHA}" ]; then
           echo "::error title=Find or Resolve Tag Failed::❌ Could not find tag ${TAG_NAME} locally."
